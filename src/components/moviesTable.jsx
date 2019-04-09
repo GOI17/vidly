@@ -6,7 +6,7 @@ import { paginate } from "../utils/paginate";
 import Genres from "./common/genres";
 import { getGenres } from "../services/fakeGenreService";
 import _ from "lodash";
-import TableHeader from "./common/tableHeader";
+import Table from "./common/table";
 
 class MoviesTable extends Component {
   columns = [
@@ -14,8 +14,24 @@ class MoviesTable extends Component {
     { path: "genre.name", label: "Genre" },
     { path: "numberInStock", label: "Stock" },
     { path: "dailyRentalRate", label: "Rate" },
-    { key: "like" },
-    { key: "delete" }
+    {
+      key: "like",
+      content: movie => (
+        <Like liked={movie.liked} onClick={() => this.handleLike(movie)} />
+      )
+    },
+    {
+      key: "delete",
+      content: movie => (
+        <button
+          value={movie}
+          className="btn btn-danger"
+          onClick={() => this.handleDelete(movie)}
+        >
+          Delete
+        </button>
+      )
+    }
   ];
   state = {
     movies: [],
@@ -57,54 +73,63 @@ class MoviesTable extends Component {
     this.setState({ sortColumn });
   };
 
-  renderMovies(movies) {
-    return movies.map((movie, index) => {
+  renderCell = (item, column) => {
+    if (column.content) return column.content(item);
+    return _.get(item, column.path);
+  };
+
+  createKey = (item, column) => {
+    return item._id + (column.path || column.key);
+  };
+
+  renderMovies = movies => {
+    return movies.map(movie => {
       return (
-        <tr key={index}>
-          <td>{movie.title}</td>
-          <td>{movie.genre.name}</td>
-          <td>{movie.numberInStock}</td>
-          <td>{movie.dailyRentalRate}</td>
-          <td className="row">
-            <div className="col-3">
-              <Like
-                liked={movie.liked}
-                onClick={() => this.handleLike(movie)}
-              />
-            </div>
-            <div className="col-3">
-              <button
-                value={movie}
-                className="btn btn-danger"
-                onClick={() => this.handleDelete(movie)}
-              >
-                Delete
-              </button>
-            </div>
-          </td>
+        <tr key={movie._id}>
+          {this.columns.map(column => (
+            <td key={this.createKey(movie, column)}>
+              {this.renderCell(movie, column)}
+            </td>
+          ))}
         </tr>
       );
     });
-  }
+  };
+
+  getPagedData = () => {
+    const {
+      currentPage,
+      pageSize,
+      movies: allMovies,
+      currentGenre,
+      sortColumn
+    } = this.state;
+
+    const filtered =
+      currentGenre && currentGenre._id
+        ? allMovies.filter(m => m.genre._id === currentGenre._id)
+        : allMovies;
+
+    const sorted = _.orderBy(filtered, [sortColumn.path], [sortColumn.order]);
+
+    const movies = paginate(sorted, currentPage, pageSize);
+
+    return { totalCount: filtered.length, data: movies };
+  };
 
   render() {
     const { length: moviesCount } = this.state.movies;
     const {
       currentPage,
       pageSize,
-      movies: allMovies,
       currentGenre,
       genres,
       sortColumn
     } = this.state;
+
     if (moviesCount === 0) return <p>There are no movies in the database</p>;
 
-    const filtered =
-      currentGenre && currentGenre._id
-        ? allMovies.filter(m => m.genre._id === currentGenre._id)
-        : allMovies;
-    const sorted = _.orderBy(filtered, [sortColumn.path], [sortColumn.order]);
-    const movies = paginate(sorted, currentPage, pageSize);
+    const { totalCount, data: movies } = this.getPagedData();
 
     return (
       <div className="row">
@@ -116,18 +141,17 @@ class MoviesTable extends Component {
           />
         </div>
         <div className="col">
-          <p>Showing {filtered.length} movies in the database.</p>
-          <table className="table">
-            <TableHeader
-              columns={this.columns}
-              onSort={this.handleSort}
-              sortColumn={sortColumn}
-            />
-            <tbody>{this.renderMovies(movies)}</tbody>
-          </table>
+          <p>Showing {totalCount} movies in the database.</p>
+          <Table
+            columns={this.columns}
+            data={movies}
+            sortColumn={sortColumn}
+            onSort={this.handleSort}
+            onRender={this.renderMovies}
+          />
           <Pagination
             currentPage={currentPage}
-            itemsCount={filtered.length}
+            itemsCount={totalCount}
             pageSize={pageSize}
             onPageChange={this.handlePageChange}
           />
